@@ -1,0 +1,489 @@
+;AwaySystem 2000 (ver. 2.1) build #1590 by mudpuddle for mIRC 5.61+ (32bit & 16bit versions) - Janurary 10th, 2000
+;Email: MmIRCS@bryansdomain.virtualave.net
+;Homepage: http://www.geocities.com/mmircs/
+;Bug Reports: http://www.geocities.com/mmircs/bugsubmit.html
+;IRC: #Lounge_Legends @ DALnet (/server irc.dal.net:7000)
+
+
+on *:LOAD:{ 
+  if ($version < 5.61) { echo $colour(info) -se *** AwaySystem - Error! AwaySystem 2000 will not work on mIRC $version $+ . Please upgrade to mIRC 5.61 or later and try to reload the script again. | unload -rs $nopath($script) }
+  asresetdefault
+  echo $colour(info) -se *** AwaySystem 2000 by mudpuddle loaded sucessfully. Starting configuration utility...
+  awaysys.config 
+}
+on *:START:{ 
+  if ($version < 5.61) { echo $colour(info) -se *** AwaySystem - Error! AwaySystem 2000 will not work on mIRC $version $+ . Please upgrade to mIRC 5.61 or later and try to reload the script again. | unload -rs $nopath($script) }
+  else {
+    rebuildasini
+    if (%asqaway) { unset %asqaway }
+    if ($asrini(awaymode) != Back) { setback }
+  }
+}
+on *:CONNECT:{ 
+  if (Away isin $asrini(awaymode)) {
+    echo $colour(info) -se *** AwaySystem - Setting to Online $asrini(awaymode) Mode: (4 $+ %awaymsg $+ )...
+    away %awaymsg
+    set %asconnect.status 1
+    if ($asrini(awaysystem.log) == 1) { writeaslog  $+ $colour(action) $+ *** Set to Online $asrini(awaymode) Mode (Reconnected to IRC server) @ $time(HH:nn:ss) $date(mm/dd/yyyy) (4 $+ %awaymsg $+  $+ $colour(action) $+ ) }
+    if ($me != $asrini(awaynick)) && ($asrini(awaymode) != StealthAway) && ($asrini(awaynick)) { nick $asrini(awaynick) }
+  }
+  elseif ($asrini(idleaway)) { beginasidlechck | echo $colour(info) -se *** AwaySystem - AwayIdle checker started. } 
+}
+on *:DISCONNECT:{ 
+  if ($asrini(awaymode) == IdleAway) { .timer -m 1 50 setback | .timerIdleAway off }
+  unset %asconnect.status 
+}
+on *:JOIN:#:{ if (%asconnect.status) && ($nick == $me) { setaway.disp | unset %asconnect.status } }
+alias -l writeaslog { write $shortfn($asrini(awaysystemlog.log)) $1- | updateaslogwindow }
+alias -l playaslogsnd { .splay $shortfn($asrini(awaylog.snd)) }
+alias -l asrini { return $readini -n awaysys.ini AwaySystem $1- }
+alias -l aswini { writeini -n awaysys.ini AwaySystem $1- }
+alias -l asrmini { remini awaysys.ini AwaySystem $1- }
+alias -l ascalc.mult { return $calc($1 * 60) }
+alias -l ascalc.dev { return $calc($1 / 60) }
+alias -l beginasidlechck { if ($server) { resetidle | .timerIdleAway 0 10 ascheckidle } }
+alias -l ascheckidle {  if ($asrini(awaymode) == Back) { if ($idle > $asrini(idleaway)) { .set %awaymsg IdleAway after $ascalc.dev($asrini(idleaway)) minute(s) | aswini awaymode IdleAway | setaway } } }
+alias -l setaway.disp { if ($chan(0) > 0) && ($asrini(awaymode) != StealthAway) && ($server) { ame is away (12Reason:4 %awaymsg $+ ) since %awayclock $+ . AwayPager is $group(#awaypager).status $+ , AwayLog is $group(#awaylogging).status } }
+alias -l setback.disp { if ($chan(0) > 0) && ($asrini(awaymode) != StealthAway) && ($server) { ame is back (12Back from:4 %awaymsg $+ ) Gone for $duration($calc(%awayback - %awaytime)) } }
+alias -l setaway { 
+  if ($timer(IdleAway)) { .timerIdleAway off }
+  if ($asrini(awaysystem.log) == 1) { writeaslog  $+ $colour(action) $+ *** Set to $asrini(awaymode) Mode @ $time(HH:nn:ss) $date(mm/dd/yyyy) (4 $+ %awaymsg $+  $+ $colour(action) $+ ) }
+  if ($asrini(awaynick)) && ($asrini(awaymode) != StealthAway) { .set %oldnick $me | nick $asrini(awaynick) }
+  .set %awaytime $ctime
+  if ($server) away %awaymsg 
+  .set %awayclock $time(h:nn:ss tt)
+  tbar
+  setaway.disp
+  if ($asrini(awaytimer)) && ($asrini(awaymode) != StealthAway) && ($server) { .timerAway 0 $asrini(awaytimer) setaway.disp }
+  if ($asrini(awaymode) == StealthAway) && ($server) { echo $colour(info) -a *** AwaySystem - Setting to StealthAway Mode (4 $+ %awaymsg $+ ). AwayPager: $group(#awaypager).status $+ , AwayLog: $group(#awaylogging).status }
+}
+alias -l setback { 
+  .set %awayback $ctime
+  if ($server == $null) || ($asrini(awaymode) == $null) { echo $colour(info) -ae *** AwaySystem - Setting to Back Mode. Gone for $duration($calc(%awayback - %awaytime)) }   
+  if (%oldnick) && ($asrini(awaymode) != StealthAway) { nick %oldnick }
+  if ($server) { away | setback.disp }
+  if ($asrini(awaymode) == StealthAway) && ($server) { echo $colour(info) -a *** AwaySystem - Returning to Back Mode from StealthAway. Gone for $duration($calc(%awayback - %awaytime)) }
+  if ($timer(Away)) { .timerAway off }
+  var %tempawaymode $asrini(awaymode)
+  aswini awaymode Back
+  if (%tempawaymode != IdleAway) { awaystatus.compare }
+  if ($asrini(awaysystem.log) == 1) { writeaslog  $+ $colour(action) $+ *** Set to Back Mode @ $time(HH:nn:ss) $date(mm/dd/yyyy) | writeaslog - }
+  if ($asrini(asidno) == $null) { unset %oldnick }
+  if ($asrini(idleaway)) { beginasidlechck }
+  tbar
+  .unset %awaymsg %awaytime %awayback %awaytime %awayclock
+}
+alias -l tbar { 
+  if ($asrini(awaytbar)) {
+    if ($asrini(awaymode) != Back) { titlebar - $asrini(awaymode) Mode since %awayclock }
+    else { titlebar }
+  }
+}
+alias -l asreset.confirm { if ($?!="Are you sure you wish to reset ALL AwaySystem options to their default values?") { dialog -x awaysysconf | asresetdefault | echo $colour(info) -ae *** AwaySystem - All options have been reset to their default values. } }
+alias -l asresetdefault { asrmini | aswini awaymode Back | .enable #awaypager #awaylogging #awaynotices | .disable #asinputback #asidno | aswini awaysystem.log 0 | aswini awaysystemlog.log $logdir $+ awaysys.log | aswini closemsg 1 | aswini notify 1 | aswini asquietid 0 | aswini awaytimer 2700 | aswini awaytbar 1 | aswini ctcppage 1 | aswini oldidletimer 900 | aswini savetbar 0 | unset %asqaway }
+alias -l clearawaysystemlog { 
+  if ($$?!="Are you sure you wish to clear AwaySystem Logs?") { 
+    if ($exists($shortfn($asrini(awaysystemlog.log)))) { .remove $shortfn($asrini(awaysystemlog.log)) }
+    clear @AwaySystemLogs 
+    echo $colour(info) -ae *** AwaySystem - All Logs have been cleared.
+  }
+}
+alias -l updateaslogwindow {
+  if ($window(@AwaySystemLogs)) { 
+    clear @AwaySystemLogs
+    if ($exists($shortfn($asrini(awaysystemlog.log)))) { loadbuf -p @AwaySystemLogs $shortfn($asrini(awaysystemlog.log)) }
+  }
+} 
+alias -l awaysystemlog {
+  clear @AwaySystemLogs
+  window -ad @AwaySystemLogs 90 90
+  if ($exists($shortfn($asrini(awaysystemlog.log)))) { loadbuf -p @AwaySystemLogs $shortfn($asrini(awaysystemlog.log)) }
+  else { 
+    clear @AwaySystemLogs
+    aline -p @AwaySystemLogs  $+ $colour(info) $+ *** AwaySystem Logs are empty
+  }
+}
+alias -l rebuildasini { if ($exists(awaysys.ini) == $false) || ($asrini(awaymode) == $null) { linesep | echo $colour(info) -a *** AwaySystem - Rebuilding corrupt or missing ini file to default configuration, please wait... | if ($away) { away } | asresetdefault | echo $colour(info) -a *** AwaySystem - Rebuild completed. Please re-enter AwaySystem Configuration to set up AwaySystem. | linesep } }
+alias -l asredoawaymsg {
+  if ($1) {
+    if ($timer(Away)) { .timerAway off }
+    set %awaymsg $1-
+    if ($server) { away %awaymsg }
+    if ($asrini(awaymode) == IdleAway) { aswini awaymode Away }
+    setaway.disp
+    if ($asrini(awaymode) == StealthAway) || ($server == $null) { echo $colour(info) -a *** AwaySystem - Changed $asrini(awaymode) message (4 $+ %awaymsg $+ ). }
+    if ($asrini(awaytbar)) { titlebar - $asrini(awaymode) Mode since %awayclock }
+    if ($asrini(awaytimer)) && ($asrini(awaymode != StealthAway)) && ($server) { .timerAway 0 $asrini(awaytimer) setaway.disp }
+    if ($asrini(awaysystem.log)) { writeaslog  $+ $colour(action) $+ *** Changed $asrini(awaymode) Message (4 $+ %awaymsg $+  $+ $colour(action) $+ ) @ $time(HH:nn:ss) $date(mm/dd/yyyy) }
+  }
+  else { echo $colour(info) -a *** AwaySystem - Error: No new Away Message was specified, Away Message has not been changed. }
+}
+alias -l logfolder {
+  did -ra awaysysconf 39 $$sdir="Select Folder to store AwaySystem Logs in" $nofile($shortfn($asrini(awaysystemlog.log)))
+}
+alias -l pagersndselect { did -ran awaysysconf 21 $$dir="Select AwayPager Sound" *.wav | did -c awaysysconf 19 | did -e awaysysconf 70 }
+alias -l logsndselect { did -ran awaysysconf 26 $$dir="Select AwayLog Sound" *.wav | did -c awaysysconf 24 | did -e awaysysconf 71 }
+alias -l asuninstall { if ($$?!="Are you sure you want to unload the AwaySystem script?") { 
+    if (Away isin $asrini(awaymode)) { echo $colour(info) -ae *** AwaySystem - Removing away status from mIRC for AwaySystem uninstall... | setback }
+    clearawaysystemlog
+    if ($exists(awaysys.ini)) { .remove awaysys.ini }
+    if ($timer(IdleAway)) { .timerIdleAway off }
+    .unset %oldnick %away* %asqaway | dialog -x awaysysconf | echo $colour(info) -se *** AwaySystem 2000 by mudpuddle unloaded. | .unload -rs $nopath($script) 
+  }
+}
+alias -l awaysystemhelp {
+  if ($window(@AwaySystemHelp)) { window -a @AwaySystemHelp }
+  else {
+    if ($exists($scriptdirashelp.msg)) {
+      clear @AwaySystemHelp
+      window -adlk0 +tne @AwaySystemHelp -1 -1 600 400 MS Sans Serif,413
+      loadbuf -p @AwaySystemHelp $shortfn($scriptdirashelp.msg)
+    }
+  }
+}
+alias -l awaysys.config {
+  if ($dialog(awaysysconf)) { dialog -v awaysysconf }
+  if ($exists(awaysys.ini)) { $dialog(awaysysconf,awaysysconf,-2) }
+}
+alias -l goaway { $dialog(asawaydiag,asawaydiag) }
+alias -l awaystatus.compare {
+  if ($asrini(oldnick2) == $null) { asrmini awaynick }
+  if ($asrini(oldnick2)) { aswini awaynick $asrini(oldnick2) | asrmini oldnick2 }
+  if (%awaypager.status == on) { .enable #awaypager }
+  if (%awaylogging.status == on) { .enable #awaylogging }
+  if (%awaynotices.status == on) { .enable #awaynotices }
+  if (%awaypager.status == off) { .disable #awaypager }
+  if (%awaypager.status == off) { .disable #awaylogging }
+  if (%awaynotices.status == off) { .disable #awaynotices }
+  .unset %awaypager.status %awaylogging.status %awaynotices.status
+}
+#awaypager on
+ctcp *:PAGE:{ 
+  if (Away isin $asrini(awaymode)) || ($asrini(ctcppage)) {
+    if ($nick != $me) { 
+      .ctcpreply $nick PAGE Your page has been logged!
+      if ($asrini(awaypager.snd)) { .splay $shortfn($asrini(awaypager.snd)) }
+      if ($window(@AwayPager) == $null) { window -ng2 @AwayPager }
+      aline -hp @AwayPager $time(HH:nn:ss) $date(mm/dd/yyyy)  $+ $colour(CTCP) $+ Page:12 $nick $+ :  $2-
+      if ($asrini(awaysystem.log)) { writeaslog $time(HH:nn:ss) $date(mm/dd/yyyy) 4Page:12 $nick $+ :  $2- }
+    }
+  }
+}
+#awaypager end
+#awaylogging on
+on *:TEXT:*:?:{
+  if (Away isin $asrini(awaymode)) && ($nick != $me) { 
+    if ($window(@AwayLog) == $null) { window -ng1 @AwayLog }
+    if ($asrini(awaylog.snd)) { playaslogsnd }
+    if ($asrini(awaysystem.log)) { writeaslog $time(HH:nn:ss) $date(mm/dd/yyyy) PrivMessage: <4 $+ $nick $+ > $1- }
+    aline -hp @AwayLog $time(HH:nn:ss) $date(mm/dd/yyyy) PrivMessage: <4 $+ $nick $+ > $1-
+    if ($asrini(closemsg)) { close -m $nick }
+    if ($asrini(notify)) { .msg $nick I'm currently away, your message has been logged. }
+    if ($group(#awaypager).status == on) { .msg $nick If your message is urgent, please type 4/ctcp $me PAGE <yourmessage> }
+  }
+}
+on *:TEXT:*:#:{
+  if (Away isin $asrini(awaymode)) && ($me isin $1-) { 
+    if ($window(@AwayLog) == $null) { window -ng1 @AwayLog }
+    if ($asrini(awaylog.snd)) { playaslogsnd }
+    if ($asrini(awaysystem.log)) { writeaslog  $time(HH:nn:ss) $date(mm/dd/yyyy) 13ChanMessage: <3 $+ $chan $+ 12\4 $+ $nick $+ > $1- }    
+    aline -hp @AwayLog $time(HH:nn:ss) $date(mm/dd/yyyy) 13ChanMessage: <3 $+ $chan $+ 12\4 $+ $nick $+ > $1-
+    if ($asrini(closemsg)) { close -m $nick }
+    if ($asrini(notify)) { .msg $nick I'm currently away, your message has been logged. }
+    if ($group(#awaypager).status == on) { .msg $nick If your message is urgent, please type 4/ctcp $me PAGE <yourmessage> }
+  }
+}
+#awaylogging end
+#awaynotices on
+on *:NOTICE:*:*:{
+  if (Away isin $asrini(awaymode)) && ($nick != $me) && ($group(#awaylogging).status == on) { 
+    if ($window(@AwayLog) == $null) { window -ng1 @AwayLog }
+    if ($asrini(awaylog.snd)) { playaslogsnd }
+    if ($asrini(awaysystem.log)) { writeaslog $time(HH:nn:ss) $date(mm/dd/yyyy) Notice: 5- $+ $nick $+ - $1- }
+    aline -hp @AwayLog $time(HH:nn:ss) $date(mm/dd/yyyy) Notice:  $+ $colour(notice) $+ - $+ $nick $+ - $1-
+  }
+}
+#awaynotices end
+#asinputback off
+on *:INPUT:#:{ if (Away isin $asrini(awaymode)) { setback } }
+#asinputback end
+#asidno on
+on *:NICK:{ if ($nick == $me) {
+    if (($newnick == %oldnick) && ($network == DALnet) && ($asrini(asidno)) && ($asrini(awaynick))) { 
+      if ($asrini(asquietid) == 0) { .echo $colour(info) -a *** AwaySystem - Identifying to NickServ, awaiting responce... }
+    nickserv identify %oldnick $asrini(asidno) | unset %oldnick }
+  }
+}
+#asidno end
+dialog awaysysconf {
+  title "AwaySystem 2000 - Configuration"
+  size -1 -1 160 120
+  option dbu
+  button "OK", 1, 69 117 27 12, ok default
+  button "Cancel", 2, 99 117 27 12, cancel
+  button "&Help!", 3, 131 117 27 12
+  button "&Unload...", 34, 6 117 27 12
+  button "&Reset...", 72, 34 117 27 12
+  tab "Pager/Log", 100, 3 3 156 100
+  tab "Logging", 101
+  tab "Sounds", 102
+  tab "Nick", 103
+  tab "Other", 99
+  text "AwaySystem Control Center", 4, 45 20 70 20, center
+  text "[Away Mode]", 35, 115 20 37 20, center
+  box "Away&Pager", 5, 20 30 50 30, tab 100
+  radio "Off", 6, 24 45 17 7, group center tab 100
+  radio "On", 7, 48 45 17 7, center tab 100
+  box "Away&Log", 8, 90 30 50 30, tab 100
+  radio "Off", 9, 95 45  17 7, group center tab 100
+  radio "On", 10, 118 45  17 7, center tab 100
+  box "AwayLog Options", 37, 21 65 120 31, tab 100
+  check "&Notify user that you are in Away Mode", 36, 30 75 99 7, tab 100
+  check "&Capture Notices", 33, 25 85 47 7, tab 100
+  check "Close &Query Windows", 38, 77 85 62 7, tab 100
+  box "AwaySystem &Logging", 11, 20 35 120 50, tab 101
+  check "Logging &Enabled", 12, 25 47 50 7, tab 101
+  button "&View...", 14, 80 47 25 12, tab 101
+  button "&Clear...", 15, 109 47 25 12, tab 101
+  button "Change &Folder...", 16, 90 69 45 12, tab 101
+  edit "",39, 25 69 63 11, autohs tab 101
+  text "AwaySystem logs are stored in the file awaysys.log", 40, 20 95 120 7, tab 101
+  text "Logging folder:", 41, 25 60 40 7, tab 101
+  box "AwaySystem Sound Events", 17, 10 35 143 65, tab 102
+  text "Away&Pager Sound:", 18, 15 45 50 7, tab 102
+  button "Preview", 70, 124 42 27 10, tab 102
+  check "Enable:", 19, 15 55 27 7, tab 102
+  edit "",21, 43 53 80 11, autohs tab 102
+  button "Change...", 22, 124 55 27 11, tab 102
+  box "" 20, 10 66 143 34, tab 102
+  text "Away&Log Sound:", 23, 15 75 50 7, tab 102
+  check "Enable:", 24, 15 86  27 7, tab 102
+  edit "",26, 43 84 80 11, autohs tab 102
+  button "Preview", 71, 124 73 27 10, tab 102
+  button "Change...", 27, 124 86 27 11, tab 102
+  box "AwayNick", 28, 10 30 143 73, tab 103
+  check "&Enable ->", 30, 15 45 31 7, center tab 103
+  text "&Nickname:", 32, 48 45 26 7, tab 103
+  edit "", 31, 75 43 60 11, edit drop tab 103
+  box "", 25, 10 57 143 46, tab 103
+  Text "DALnet Options - On return to Back Mode:", 62, 15 65 101 7, tab 103
+  check "&Identify to NickServ ->", 63, 15 78 61 7, tab 103
+  text "&Password:", 64, 79 78 25 7, tab 103
+  edit "", 65, 105 77 43 10, pass tab 103
+  check "Enable ''&Quiet Identifying''", 66, 15 90 70 7, tab 103
+  box "Other AwaySystem Options", 42, 10 30 142 67, tab 99
+  check "Repeat Away &message every", 45, 15 40 78 7, tab 99
+  edit "", 46, 95 39 13 10, center tab 99
+  text "Minutes", 47, 110 40 19 7, tab 99
+  check "&Show Away Mode status in mIRC Titlebar", 55, 15 52 107 7, tab 99
+  check "&Allow CTCP PAGE requests in Back Mode", 57, 15 62 109 7, tab 99
+  check "&Go into Away Mode after", 58, 15 73 68 7, tab 99
+  edit "", 59, 85 72 13 10, center tab 99
+  text "Minutes Idle", 60, 100 73 29 7, tab 99
+  check "S&et to Back Mode on input", 61, 15 84 73 7, tab 99
+}
+on *:DIALOG:awaysysconf:sclick:70:{ if ($isfile($did(21).text)) { splay $shortfn($did(21).text) } }
+on *:DIALOG:awaysysconf:sclick:71:{ if ($isfile($did(26).text)) { splay $shortfn($did(26).text) } }
+on *:DIALOG:awaysysconf:init:0: {
+  did -ft $dname 1
+  did -ma $dname 39 $nofile($asrini(awaysystemlog.log))
+  if ($asrini(awaytimer)) { did -c $dname 45 | did -a $dname 46 $ascalc.dev($asrini(awaytimer)) }
+  if ($asrini(awaytimer) == $null) { did -ma $dname 46 $ascalc.dev($asrini(oldtimer)) }
+  if ($exists($scriptdirashelp.msg) == $false) { did -b $dname 3 }
+  if ($group(#awaypager).status == on) { did -c $dname 7 }
+  if ($group(#awaypager).status == off) { did -c $dname 6 }
+  if ($group(#awaylogging).status == on) { did -c $dname 10 }
+  if ($group(#awaylogging).status == off) { did -c $dname 9 }
+  if ($group(#awaynotices).status == on) { did -c $dname 33 }
+  if ($group(#asinputback).status == on) { did -c $dname 61 }
+  if ($asrini(awaysystem.log)) { did -c $dname 12 }
+  if ($asrini(awaysystem.log) != 1) { did -b $dname 16,39,41 }
+  if ($asrini(awaypager.snd)) { did -c $dname 19 | did -nra $dname 21 $asrini(awaypager.snd) }
+  if ($asrini(awaypager.snd) == $null) { did -ma $dname 21 $asrini(oldpager.snd) | did -b $dname 70 }
+  if ($asrini(awaylog.snd)) { did -c $dname 24 | did -nra $dname 26 $asrini(awaylog.snd) }
+  if ($asrini(awaylog.snd) == $null) { did -ma $dname 26 $asrini(oldlog.snd) | did -b $dname 71 }
+  if ($asrini(awaynick)) { did -c $dname 30 | did -nra $dname 31 $asrini(awaynick) }
+  if ($asrini(awaynick) == $null) { did -ba $dname 31 $asrini(oldnick1) | did -b $dname 32 }
+  if ($asrini(notify)) { did -c $dname 36 }
+  if ($asrini(closemsg)) { did -c $dname 38 }
+  if ($asrini(ctcppage)) { did -c $dname 57 }
+  if ($asrini(idleaway)) { did -c $dname 58 | did -a $dname 59 $ascalc.dev($asrini(idleaway)) }
+  if ($asrini(idleaway) == $null) { did -ma $dname 59 $ascalc.dev($asrini(oldidletimer)) }
+  if ($asrini(asidno)) { did -c $dname 63 | did -a $dname 65 $asrini(asidno) }
+  if ($asrini(asidno) == $null) { did -b $dname 64,65 }
+  if ($asrini(asquietid)) { did -c $dname 66 }
+  if ($asrini(awaytbar)) { did -c $dname 55 }
+  if (Away isin $asrini(awaymode)) { did -bm $dname 12,16,39,41,30,31,32,45,46,47,55,58,59,60 }
+  else { did -h $dname 35 }
+}
+On *:DIALOG:awaysysconf:sclick:45:{
+  if ($did(45).state) { did -n $dname 46 }
+  if ($did(45).state == 0) { did -m $dname 46 }
+}
+On *:DIALOG:awaysysconf:sclick:58:{
+  if ($did(58).state) { did -n $dname 59 }
+  if ($did(58).state == 0) { did -m $dname 59 }
+}
+On *:DIALOG:awaysysconf:sclick:63:{
+  if ($did(63).state) { did -e $dname 64,65 }
+  if ($did(63).state == 0) { did -b $dname 64,65 }
+}
+On *:DIALOG:awaysysconf:sclick:34:{ .timer 1 0 asuninstall }
+On *:DIALOG:awaysysconf:sclick:3:{ awaysystemhelp }
+On *:DIALOG:awaysysconf:sclick:1:{
+  if ($did(6).state) { .disable #awaypager }
+  if ($did(7).state) { .enable #awaypager }
+  if ($did(9).state) { .disable #awaylogging }
+  if ($did(10).state) { .enable #awaylogging }
+  if ($did(12).state == 0) { aswini awaysystem.log 0 }
+  if ($did(12).state) { aswini awaysystem.log 1 }
+  if ($did(19).state == 0) && ($asrini(awaypager.snd)) { aswini oldpager.snd $asrini(awaypager.snd) | asrmini awaypager.snd }
+  if ($did(19).state) && ($did(21).text) { if ($isfile($did(21).text)) { aswini awaypager.snd $did(21).text } }
+  if ($did(24).state == 0) && ($asrini(awaylog.snd)) { aswini oldlog.snd $asrini(awaylog.snd) | asrmini awaylog.snd }
+  if ($did(24).state) && ($did(26).text) { if ($isfile($did(26).text)) { aswini awaylog.snd $did(26).text } }
+  if ($did(30).state == 0) && ($asrini(awaynick)) { aswini oldnick1 $asrini(awaynick) | asrmini awaynick }
+  if ($did(30).state)  && ($did(31).text) { aswini awaynick $strip($did(31).text) }
+  if ($did(33).state) { .enable #awaynotices }
+  if ($did(33).state == 0) { .disable #awaynotices }
+  if ($did(61).state) { .enable #asinputback }
+  if ($did(61).state == 0) { .disable #asinputback }
+  if ($did(36).state) { aswini notify 1 }
+  if ($did(36).state == 0) { aswini notify 0 }
+  if ($did(38).state) { aswini closemsg 1 }
+  if ($did(38).state == 0) { aswini closemsg 0 }
+  if ($did(39).text) { aswini awaysystemlog.log $did(39).text $+ awaysys.log }
+  if ($did(45).state == 0) { asrmini awaytimer }
+  if ($did(45).state) && ($did(46).text isnum) && ($did(46).text) { aswini awaytimer $ascalc.mult($did(46).text) | aswini oldtimer $asrini(awaytimer) }
+  if ($did(46).text == 0) { asrmini awaytimer }
+  if ($did(55).state) { aswini awaytbar 1 }
+  if ($did(55).state == 0) { aswini awaytbar 0 }
+  if ($did(57).state) { aswini ctcppage 1 }
+  if ($did(57).state == 0) { aswini ctcppage 0 }
+  if ($did(58).state == 0) { asrmini idleaway | if ($timer(IdleAway)) { .timerIdleAway off } }
+  if ($did(58).state) && ($did(59).text isnum) && ($did(59).text) { aswini idleaway $ascalc.mult($did(59).text) | aswini oldidletimer $asrini(idleaway) | if ($timer(IdleAway) == $null) { beginasidlechck } }
+  if ($did(59).text == 0) { asrmini idleaway | if ($timer(IdleAway)) { .timerIdleAway off } }
+  if ($did(63).state) && ($did(65).text) { aswini asidno $strip($did(65).text) | .enable #asidno }
+  if ($did(63).state == 0) { asrmini asidno | .disable #asidno }
+  if ($did(66).state) { aswini asquietid 1 }
+  if ($did(66).state == 0) { aswini asquietid 0 }
+}
+On *:DIALOG:awaysysconf:sclick:12:{ 
+  if ($did(12).state == 0) { did -b $dname 16,39,41 }
+  if ($did(12).state) { did -e $dname 16,39,41 }
+}
+On *:DIALOG:awaysysconf:sclick:19:{
+  if ($did(19).state == 0) { did -m $dname 21 | did -b $dname 70 }
+  if ($did(19).state) { did -n $dname 21 | did -e $dname 70 }
+}
+On *:DIALOG:awaysysconf:sclick:24:{
+  if ($did(24).state == 0) { did -m $dname 26 | did -b $dname 71 }
+  if ($did(24).state) { did -n $dname 26 | did -e $dname 71 }
+}
+On *:DIALOG:awaysysconf:sclick:30:{ 
+  if ($did(30).state) { did -en $dname 31,32 }
+  elseif ($did(30).state == 0) { did -bm $dname 31,32 }
+}
+On *:DIALOG:awaysysconf:sclick:14:{ awaysystemlog }
+On *:DIALOG:awaysysconf:sclick:15:{ .timer 1 0 clearawaysystemlog }
+On *:DIALOG:awaysysconf:sclick:16:{ .timer 1 0 logfolder }
+On *:DIALOG:awaysysconf:sclick:22:{ .timer 1 0 pagersndselect }
+On *:DIALOG:awaysysconf:sclick:27:{ .timer 1 0 logsndselect }
+On *:DIALOG:awaysysconf:sclick:72:{ .timer 1 0 asreset.confirm }
+dialog asawaydiag { 
+  title "AwaySystem 2000 - Enter Away Mode" 
+  size -1 -1 160 40 
+  option dbu
+  text "&Away message:", 202, 5 7 37 7 
+  edit "", 1, 43 5 115 11
+  check "Away&Pager ", 2, 5 21 37 7 
+  check "Away&Log ", 3, 55 21 32 7, 3state
+  button "OK", 101, 5 35 27 12, OK default 
+  button "Cancel", 102, 38 35 27 12, cancel
+  check "&Nick:", 103, 75 38 22 7
+  edit "", 105, 98 36 60 11
+  text "(", 106, 95 21 7 7
+  check "= No Notice Logging)", 104, 97 21 60 7, 3state
+} 
+on *:DIALOG:asawaydiag:sclick:102:{ unset %asqaway }
+on *:DIALOG:asawaydiag:init:0:{ 
+  if (%asqaway) { dialog -t $dname AwaySystem 2000 - Enter StealthAway Mode | did -h $dname 103,105 }
+  if ($group(#awaypager).status == on) { did -c $dname 2 } 
+  if ($group(#awaylogging).status == on) { did -c $dname 3 }
+  if ($group(#awaynotices).status == off) && ($group(#awaylogging).status == on) { did -cu $dname 3 }
+  if ($asrini(awaynick)) { did -a $dname 105 $asrini(awaynick) | did -c $dname 103 }
+  if ($asrini(awaynick) == $null) { did -b $dname 105 }
+  if ($asrini(awaynick) == $null) && ($asrini(oldnick1)) { did -ba $dname 105 $asrini(oldnick1) }
+  did -cu $dname 104
+}
+on *:DIALOG:asawaydiag:sclick:104:{ did -cu $dname 104 }
+on *:DIALOG:asawaydiag:sclick:103:{
+  if ($did(103).state == 0) { did -b $dname 105 }
+  else { did -e $dname 105 }
+}
+on *:DIALOG:asawaydiag:sclick:101:{ 
+  %awaypager.status = $group(#awaypager).status
+  %awaylogging.status = $group(#awaylogging).status
+  %awaynotices.status = $group(#awaynotices).status
+  if ($did(2).state) { .enable #awaypager }
+  if ($did(2).state == 0) { .disable #awaypager }
+  if ($did(3).state) { .enable #awaylogging #awaynotices }
+  if ($did(3).state == 0) { .disable #awaylogging #awaynotices }
+  if ($did(3).state == 2) { .enable #awaylogging | .disable #awaynotices }
+  if ($did(103).state) && ($did(105).text) && ($asrini(awaynick)) { aswini oldnick2 $asrini(awaynick) | aswini awaynick $strip($did(105).text) }
+  if ($did(103).state == 0) || ($did(105).text == $null) && ($asrini(awaynick)) { aswini oldnick2 $asrini(awaynick) | asrmini awaynick }
+  if ($did(103).state) && ($did(105).text) { aswini awaynick $strip($did(105).text) }
+  if ($did(1).text) { .set %awaymsg $did(1).text }
+  if ($did(1).text == $null) { .set %awaymsg Away }
+  if (%asqaway) { aswini awaymode StealthAway }
+  if (%asqaway == $null) { aswini awaymode Away }
+  if ($server == $null) { echo $colour(info) -a *** AwaySystem - Setting to Offline $asrini(awaymode) mode (4 $+ %awaymsg $+ ). AwayPager: $group(#awaypager).status $+ , AwayLog: $group(#awaylogging).status $+ . You will be set to Online $asrini(awaymode) when you connect to IRC. }
+  setaway
+  unset %asqaway
+}
+dialog asmsgchng { 
+  title "AwaySystem - Change Away Message" 
+  size -1 -1 165 30 
+  option dbu
+  text "&New message:", 200, 5 7 35 7 
+  edit "", 1, 43 5 120 11
+  button "OK", 101, 5 25 27 12, OK default 
+  button "Cancel", 102, 38 25 27 12, cancel
+}
+On *:DIALOG:asmsgchng:sclick:101:{
+  asredoawaymsg $did(1).text
+}
+menu @AwaySystemHelp { 
+  Hide Window:window -h $active
+  Close Window:window -c $active
+}
+menu @AwayLog,@AwayPager,@AwaySystemLogs {
+  $iif($active != @AwaySystemLogs,Clear Window &Buffer):clear
+  $iif($active != @AwaySystemLogs,&View AwaySystem Logs):rebuildasini | awaysystemlog
+  $iif($active == @AwaySystemLogs,&Clear AwaySystem Logs...):rebuildasini | clearawaysystemlog
+  -
+  &Configure &AwaySystem...:rebuildasini | awaysys.config
+  $iif($exists($scriptdirashelp.msg),&Help!):awaysystemhelp
+  -
+  Hide Window:window -h $active
+  Close Window:window -c $active
+}
+menu channel,menubar,status {
+  &AwaySystem ( $+ $iif($asrini(awaymode) == $null,Unknown,$asrini(awaymode)): Mode)
+  .$iif($exists(awaysys.ini) == $false || $asrini(awaymode) == $null,Configuration file missing or corrupt. Click to rebuild):rebuildasini
+  .$iif($asrini(awaymode) == Back,Set to &Away Mode...):goaway
+  .$iif($asrini(awaymode) == Back,Set to &StealthAway Mode...):set %asqaway 1 | goaway
+  .$iif(Away isin $asrini(awaymode),Set to &Back Mode):setback
+  .$iif(Away isin $asrini(awaymode),Change Away &Message...):$dialog(asmsgchng,asmsgchng)
+  .-
+  .$iif($exists(awaysys.ini) && $asrini(awaymode),&Configure AwaySystem...):awaysys.config
+  .$iif($exists(awaysys.ini) && $asrini(awaymode),&View AwaySystem Logs):awaysystemlog
+  .-
+  .&Help!
+  ..$iif($exists($scriptdirashelp.msg),Help &Window, [Help file is not installed]):awaysystemhelp
+  ..-
+  ..MmIRCS Web &site...:run http://www.geocities.com/mmircs/
+  ..&Email MmIRCS...:run mailto:MmIRCS@bryansdomain.virtualave.net?subject=AwaySystem 2000
+  ..S&ubmit a Bug...:run http://www.geocities.com/mmircs/bugsubmit.html
+  ..-
+  ..About AwaySyste&m:linesep | echo -a AwaySystem 2000 (version 2.1) build #1590 by mudpuddle. Janurary 10th, 2000 | echo -a Homepage: 12http://www.geocities.com/mmircs/ | echo -a Bug reports: 12http://www.geocities.com/mmircs/bugsubmit.html | echo -a Email: 12MmIRCS@bryansdomain.virtualave.net  | echo -a IRC: $+ $colour(ctcp) #Lounge_Legends on DALnet (/server irc.dal.net:7000) | linesep
+}
